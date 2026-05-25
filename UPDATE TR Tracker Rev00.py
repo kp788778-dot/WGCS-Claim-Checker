@@ -122,7 +122,7 @@ def process_pdf(uploaded_file):
             methods = replace_field_density(methods)
 
             if not methods:
-                rows.append([tr, when_reqd, "", "not used", lot_no, lot_type])
+                rows.append([tr, when_reqd, "", None, lot_no, lot_type])
             else:
                 for method, count in methods:
                     rows.append([tr, when_reqd, method, count, lot_no, lot_type])
