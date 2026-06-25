@@ -50,12 +50,12 @@ def replace_field_density(methods):
     count_134_combined = count_134 + count_324
 
     mapping = {
-        (2, 6): "Field Density Package - 6 NDM Sites x 2 MDD",
-        (2, 3): "Field Density Package - 3 NDM Sites x 2 MDD",
-        (3, 3): "Field Density Package - 3 NDM Sites x 3 MDD",
-        (3, 6): "Field Density Package - 6 NDM Sites x 3 MDD",
-        (3, 9): "Field Density Package - 9 NDM Sites x 3 MDD",
-        (6, 6): "Field Density Package - 6 NDM Sites x 6 MDD",
+        (2, 6): "WA Testing - Field Density-6 NDM Sites x 2 MDD",
+        (2, 3): "WA Testing - Field Density-3 NDM Sites x 2 MDD",
+        (3, 3): "WA Testing - Field Density-3 NDM Sites x 3 MDD",
+        (3, 6): "WA Testing - Field Density-6 NDM Sites x 3 MDD",
+        (3, 9): "WA Testing - Field Density-9 NDM Sites x 3 MDD",
+        (6, 6): "WA Testing - Field Density-6 NDM Sites x 6 MDD",
     }
 
     key = (count_133, count_134_combined)
