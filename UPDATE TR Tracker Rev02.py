@@ -693,7 +693,7 @@ st.set_page_config(
 )
 
 st.title("TR Claim Reconciliation Tool")
-st.write('''WHAT IS THIS?  \n
+st.markdown('''WHAT IS THIS?  \n
     This tool does two things:  \n
     1. Scrapes one or more CivilPro Test Request PDFs into a combined Excel table.  \n
     2. Compares those TRs against a WGLS claim sheet and shows any discrepancies.  \n
