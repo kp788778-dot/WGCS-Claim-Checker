@@ -835,26 +835,7 @@ def build_excel_output(cp_df, pivot_df, disc_df):
     return buffer.getvalue()
 
 
-def check_duplicate_trs(claim_df):
-    """
-    Scans the claim DataFrame for TR numbers that appear more than once and
-    returns a summary Series for display as a warning.
 
-    A TR is considered a duplicate if its normalised TR value appears on
-    more than one row in the claim DataFrame. This can indicate that two
-    different claim Excel files contain entries for the same TR, or that a
-    single file has duplicate rows.
-
-    Args:
-        claim_df (pd.DataFrame): Combined claim DataFrame from all uploaded
-                                 claim sheets.
-
-    Returns:
-        pd.Series: Value counts for TR numbers that appear more than once,
-                   indexed by TR. Empty Series if no duplicates exist.
-    """
-    counts = claim_df["TR"].value_counts()
-    return counts[counts > 1]
 
 
 # ─────────────────────────────────────────────────────────────
