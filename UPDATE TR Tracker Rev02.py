@@ -976,14 +976,7 @@ if run_button:
         f"**{len(claim_df)}** total claim rows extracted."
     )
 
-    # ── Duplicate TR warning ──────────────────────────────────
-    duplicates = check_duplicate_trs(claim_df)
-
-    if len(duplicates) > 0:
-        with st.expander("⚠️ Duplicate TRs found in claim sheets", expanded=True):
-            for tr, count in duplicates.items():
-                st.warning(f"TR {tr} appears {count} times")
-
+    
     # ── Build outputs ─────────────────────────────────────────
     st.subheader("Building Report…")
 
