@@ -795,13 +795,7 @@ if run_button:
         f"**{len(claim_df)}** total claim rows extracted."
     )
 
-    # ── Duplicate TR warning ──────────────────────────────────
-    duplicates = check_duplicate_trs(claim_df)
 
-    if len(duplicates) > 0:
-        with st.expander("Duplicate TRs found in claim sheets", expanded=True):
-            for tr, count in duplicates.items():
-                st.warning(f"TR {tr} appears {count} times")
 
     # ── Build outputs ─────────────────────────────────────────
     st.subheader("Building Report…")
@@ -811,7 +805,7 @@ if run_button:
         disc_df = build_discrepancies(cp_df, claim_df)
         excel_bytes = build_excel_output(cp_df, pivot_df, disc_df)
 
-    st.success("Report ready!")
+    st.success("Report ready")
 
     # ── Summary metrics ───────────────────────────────────────
     st.divider()
