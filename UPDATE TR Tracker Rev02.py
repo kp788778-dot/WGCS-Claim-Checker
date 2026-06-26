@@ -692,7 +692,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("TR Claim Reconciliation Tool")
+st.title("Western Geo TR Claim Reconciliation")
 st.markdown('''WHAT IS THIS?  \n
     This tool does two things:  \n
     1. Scrapes one or more CivilPro Test Request PDFs into a combined Excel table.  \n
