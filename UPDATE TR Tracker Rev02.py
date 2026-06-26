@@ -100,7 +100,7 @@ def normalize_method_name(name):
         str: The full standardised test method name, or the original if no
              match is found.
     """
-    for key, full in FULL_NAMES.items(): #.items() gives tuples of the dict key/name pairs
+    for key, full in FULL_NAMES.items():
         if key in name:
             return full
     return name
@@ -126,16 +126,16 @@ def normalize_match_text(text):
     Returns:
         str: Normalised text ready for word-overlap comparison.
     """
-    if pd.isna(text): #step 1
+    if pd.isna(text):
         return ""
 
-    text = str(text).lower().strip() #step 2
-    text = re.sub(r"[\.\:\-\(\)\/\,]", " ", text) #step 3
-    text = re.sub(r"\s+", " ", text) #step 4
-    text = text.strip() #step 5
+    text = str(text).lower().strip()
+    text = re.sub(r"[\.\:\-\(\)\/\,]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    text = text.strip()
 
     if text in MATCH_ALIASES:
-        text = MATCH_ALIASES[text] #step 6
+        text = MATCH_ALIASES[text]
 
     return text
 
@@ -223,7 +223,7 @@ def replace_field_density(methods):
         ("WA 133.1 Modified", 1)
         ]
     So when I call m,c in methods I am referencing method and count.
-    
+
     Logic:
       1. Counts the total number of WA 133.1 tests across all method entries
          (these represent MDD compaction tests).
@@ -267,7 +267,6 @@ def replace_field_density(methods):
 
 
 def process_pdf(pdf_file):
-
     """
     Parses a single CivilPro test request PDF and extracts structured test
     data from every page that contains a TR number.
@@ -379,7 +378,7 @@ def process_pdf(pdf_file):
     return df
 
 
-def parse_claim_sheet(file):
+def parse_claim_sheet(file, filename=""):
     """
     Reads the 'Detail' tab from a CivilPro claim Excel workbook and extracts
     a flat table of claimed test items with their associated TR and date.
@@ -396,13 +395,19 @@ def parse_claim_sheet(file):
       - Concatenates code and method into a single 'Claimed test' string,
         handling cases where one of the two may be absent.
       - Raises ValueError if the workbook does not contain a 'Detail' sheet.
+      - Also extracts a claim month label from the filename via
+        extract_claim_month_from_filename() and stores it on every row in a
+        'Claim Month' column so that the discrepancy report can display which
+        month each claimed item belongs to.
 
     Args:
         file: A file-like object (BytesIO) of the Excel workbook to parse.
+        filename (str): Original filename of the uploaded workbook, used to
+                        extract the claim month label.
 
     Returns:
         pd.DataFrame: DataFrame with columns:
-            TR, Date, Claimed test, Qty
+            TR, Date, Claimed test, Qty, Claim Month
     """
     wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
 
@@ -413,6 +418,8 @@ def parse_claim_sheet(file):
     rows = []
     current_tr = None
     current_date = None
+
+    claim_month = extract_claim_month_from_filename(filename)
 
     for row in ws.iter_rows(min_row=2):
         ticket = row[1].value
@@ -448,9 +455,91 @@ def parse_claim_sheet(file):
                 else (method or code or "")
             ),
             "Qty": qty,
+            "Claim Month": claim_month,
         })
 
     return pd.DataFrame(rows)
+
+
+def extract_claim_month_from_filename(filename):
+    """
+    Extracts a human-readable claim month label from the filename of a claim
+    Excel workbook.
+
+    The function tries three strategies in order:
+
+      1. Named month — looks for a full or abbreviated English month name
+         followed by a four-digit year anywhere in the filename (case-
+         insensitive). Examples that match:
+           "WGLS_Claim_May 2026.xlsx"  →  "May 2026"
+           "Claim_June2026_v2.xlsx"    →  "June 2026"
+           "Apr_2026_claim.xlsx"       →  "Apr 2026"
+
+      2. Numeric month — looks for a MM-YYYY or MM_YYYY or YYYY-MM pattern
+         anywhere in the filename. Examples that match:
+           "Claim_05-2026.xlsx"        →  "May 2026"
+           "2026_06_claim.xlsx"        →  "June 2026"
+
+      3. Fallback — if neither pattern matches, returns the filename stem
+         (filename without extension) so the column still has a useful label
+         rather than being blank.
+
+    Args:
+        filename (str): The original filename of the uploaded claim workbook,
+                        including extension.
+
+    Returns:
+        str: A month label such as "May 2026", "June 2026", or the filename
+             stem if no date pattern is found.
+    """
+    if not filename:
+        return "Unknown"
+
+    stem = Path(filename).stem
+
+    # Strategy 1: named month + year
+    month_names = (
+        "January|February|March|April|May|June|July|August|September|"
+        "October|November|December|"
+        "Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+    )
+    named_match = re.search(
+        rf"({month_names})[\s_\-]*(\d{{4}})",
+        filename,
+        re.IGNORECASE,
+    )
+    if named_match:
+        month_str = named_match.group(1).capitalize()
+        year_str = named_match.group(2)
+        # Expand 3-letter abbreviations to full names
+        try:
+            dt = datetime.strptime(f"{month_str} {year_str}", "%B %Y")
+            return dt.strftime("%B %Y")
+        except ValueError:
+            try:
+                dt = datetime.strptime(f"{month_str} {year_str}", "%b %Y")
+                return dt.strftime("%B %Y")
+            except ValueError:
+                return f"{month_str} {year_str}"
+
+    # Strategy 2: numeric MM-YYYY or YYYY-MM
+    numeric_match = re.search(
+        r"(\d{2})[-_](\d{4})|(\d{4})[-_](\d{2})",
+        filename,
+    )
+    if numeric_match:
+        if numeric_match.group(1):
+            mm, yyyy = numeric_match.group(1), numeric_match.group(2)
+        else:
+            yyyy, mm = numeric_match.group(3), numeric_match.group(4)
+        try:
+            dt = datetime.strptime(f"{mm} {yyyy}", "%m %Y")
+            return dt.strftime("%B %Y")
+        except ValueError:
+            pass
+
+    # Strategy 3: fall back to filename stem
+    return stem
 
 
 def build_pivot(cp_df):
@@ -482,7 +571,8 @@ def build_pivot(cp_df):
 def build_discrepancies(cp_df, claim_df):
     """
     Compares CivilPro test request data against claim sheet data on a
-    per-TR basis and produces a row-level discrepancy report.
+    per-TR basis and produces a row-level discrepancy report, then appends
+    a 'Claim Month' column on the far right pulled from the claim DataFrame.
 
     Matching logic per TR:
       - If a TR exists only in CivilPro (not in the claim sheet): all CP
@@ -497,6 +587,9 @@ def build_discrepancies(cp_df, claim_df):
           - If quantities differ: flagged as "QUANTITY MISMATCH".
           - If no CP method matches: flagged as "TEST MISMATCH", and all CP
             methods for that TR are concatenated with "; " as context.
+            After the initial pass, apply_abbreviated_psd_match() is called
+            to resolve WA 115.2 mismatches where the CivilPro TR already
+            contains a Field Density Package in the same lot.
 
     TR ordering: all TRs from both sources are sorted numerically (non-digit
     TRs sort last via the key lambda).
@@ -508,21 +601,21 @@ def build_discrepancies(cp_df, claim_df):
     Returns:
         pd.DataFrame: DataFrame with columns:
             TR, Date, Match, Claimed test, Inv. Quantity,
-            CivilPro test, CivilPro Quantity
+            CivilPro test, CivilPro Quantity, Claim Month
     """
     discrepancy_rows = []
 
     claim_by_tr = (
         claim_df.dropna(subset=["TR"])
         .groupby("TR", group_keys=False)
-        .apply(lambda g: g[["Date", "Claimed test", "Qty"]].to_dict("records"))
+        .apply(lambda g: g[["Date", "Claimed test", "Qty", "Claim Month"]].to_dict("records"))
         .to_dict()
     )
 
     cp_by_tr = (
         cp_df.dropna(subset=["TR"])
         .groupby("TR")
-        .apply(lambda g: g[["Test method", "No. tests"]].to_dict("records"))
+        .apply(lambda g: g[["Test method", "No. tests", "Lot no."]].to_dict("records"))
         .to_dict()
     )
 
@@ -545,6 +638,7 @@ def build_discrepancies(cp_df, claim_df):
                     "Inv. Quantity": "",
                     "CivilPro test": cp["Test method"],
                     "CivilPro Quantity": cp["No. tests"],
+                    "Claim Month": "",
                 })
 
         elif not cp_items:
@@ -557,6 +651,7 @@ def build_discrepancies(cp_df, claim_df):
                     "Inv. Quantity": item.get("Qty"),
                     "CivilPro test": "",
                     "CivilPro Quantity": "",
+                    "Claim Month": item.get("Claim Month", ""),
                 })
 
         else:
@@ -564,6 +659,7 @@ def build_discrepancies(cp_df, claim_df):
                 claimed_test = item.get("Claimed test", "")
                 inv_qty = item.get("Qty")
                 date = item.get("Date")
+                claim_month = item.get("Claim Month", "")
 
                 normalized_claim = normalize_match_text(claimed_test)
                 matched_cp = None
@@ -588,6 +684,7 @@ def build_discrepancies(cp_df, claim_df):
                         "Inv. Quantity": inv_qty,
                         "CivilPro test": matched_cp["Test method"],
                         "CivilPro Quantity": cp_qty,
+                        "Claim Month": claim_month,
                     })
                 else:
                     discrepancy_rows.append({
@@ -602,14 +699,91 @@ def build_discrepancies(cp_df, claim_df):
                         "CivilPro Quantity": "; ".join(
                             str(cp["No. tests"]) for cp in cp_items
                         ),
+                        "Claim Month": claim_month,
                     })
 
     disc_df = pd.DataFrame(discrepancy_rows)
 
-    return disc_df[[
+    disc_df = disc_df[[
         "TR", "Date", "Match", "Claimed test",
-        "Inv. Quantity", "CivilPro test", "CivilPro Quantity",
+        "Inv. Quantity", "CivilPro test", "CivilPro Quantity", "Claim Month",
     ]]
+
+    # ── Resolve WA 115.2 mismatches where a Field Density Package is on the
+    #    same TR in CivilPro (see apply_abbreviated_psd_match docstring).
+    disc_df = apply_abbreviated_psd_match(disc_df, cp_by_tr)
+
+    return disc_df
+
+
+def apply_abbreviated_psd_match(disc_df, cp_by_tr):
+    """
+    Resolves TEST MISMATCH rows where the claimed test is a WA 115.2
+    Abbreviated PSD and the CivilPro TR contains a Field Density Package.
+
+    Background: CivilPro bundles the Abbreviated PSD inside the Field Density
+    Package price, so it does not appear as a separate line item in the PDF.
+    When the claim sheet lists 'WA 115.2 - Abbreviated PSD' against a TR
+    that only has a Field Density Package in CivilPro, the standard
+    words_match() logic flags it as a TEST MISMATCH. This function corrects
+    those cases.
+
+    Logic:
+      1. Iterates over every row in disc_df.
+      2. Skips rows that are not TEST MISMATCH, or whose claimed test does
+         not contain "115.2" (case-insensitive).
+      3. For matching rows, looks up the CivilPro test methods for that TR
+         via cp_by_tr.
+      4. Checks whether any of the CP methods is a Field Density Package
+         (detected by the substring "Field Density Package" in the method
+         name).
+      5. If a Field Density Package is found on the same TR, updates the row:
+           - Match       → "Yes" (the PSD is considered included)
+           - CivilPro test → the Field Density Package method name
+           - CivilPro Quantity → the Field Density Package quantity
+      6. If no Field Density Package is found, the row is left unchanged
+         (still TEST MISMATCH).
+
+    Note: this function operates on the already-built disc_df after
+    build_discrepancies() has completed its main loop. It does NOT re-run
+    the full comparison; it only patches qualifying rows.
+
+    Args:
+        disc_df (pd.DataFrame): The discrepancy DataFrame produced by
+                                build_discrepancies(), before being returned.
+        cp_by_tr (dict): Mapping of TR string → list of dicts with keys
+                         'Test method', 'No. tests', 'Lot no.' — the same
+                         dict built inside build_discrepancies().
+
+    Returns:
+        pd.DataFrame: The disc_df with qualifying WA 115.2 TEST MISMATCH
+                      rows updated to "Yes".
+    """
+    for idx, row in disc_df.iterrows():
+
+        if row["Match"] != "TEST MISMATCH":
+            continue
+
+        if "115.2" not in str(row["Claimed test"]).lower():
+            continue
+
+        tr = row["TR"]
+        cp_items = cp_by_tr.get(tr, [])
+
+        fd_match = next(
+            (
+                cp for cp in cp_items
+                if "Field Density Package" in str(cp["Test method"])
+            ),
+            None,
+        )
+
+        if fd_match:
+            disc_df.at[idx, "Match"] = "Yes"
+            disc_df.at[idx, "CivilPro test"] = fd_match["Test method"]
+            disc_df.at[idx, "CivilPro Quantity"] = fd_match["No. tests"]
+
+    return disc_df
 
 
 def build_excel_output(cp_df, pivot_df, disc_df):
@@ -620,7 +794,8 @@ def build_excel_output(cp_df, pivot_df, disc_df):
     Sheet layout:
       - 'All tests': Full row-level CivilPro test data (cp_df).
       - 'Tests summary': Pivot table of total tests by method (pivot_df).
-      - 'Discrepancies': Row-level comparison report (disc_df).
+      - 'Discrepancies': Row-level comparison report (disc_df), which now
+        includes the 'Claim Month' column on the far right.
 
     Post-processing applied to every sheet:
       - Auto-fits column widths by iterating over all cells, measuring the
@@ -693,20 +868,22 @@ st.set_page_config(
 )
 
 st.title("Western Geo TR Claim Reconciliation")
-st.markdown('''WHAT IS THIS?  \n
-    This tool does two things:  \n
-    1. Scrapes one or more CivilPro Test Request PDFs into a combined Excel table.  \n
-    2. Compares those TRs against a WGLS claim sheet and shows any discrepancies.  \n
 
-    HOW TO USE:
-    1. Upload one or more Test Request PDFs (from CivilPro → Printer → "Test Requests (pdf)").
-    2. Click "Process CivilPro PDFs" to combine them all into one TR list.
-    3. Upload your WGLS Claim Sheet (.xlsx) to the second box.
-    4. The app will match TRs and show a discrepancy report.
-    5. Download the final Excel file (All tests / Tests summary / Discrepancies tabs).
+st.markdown("""
+**What is this?**
 
-    If you have any questions or it breaks, please ask Kieran.''')
+This tool does two things:
+1. Scrapes one or more CivilPro Test Request PDFs into a combined Excel table.
+2. Compares those TRs against a WGLS claim sheet and shows any discrepancies.
 
+**How to use:**
+1. Upload one or more Test Request PDFs (from CivilPro → Printer → "Test Requests (pdf)").
+2. Upload your WGLS Claim Sheet (.xlsx) to the second box.
+3. Click **Run Reconciliation** — the app will match TRs and show a discrepancy report.
+4. Download the final Excel file (All tests / Tests summary / Discrepancies tabs).
+
+If you have any questions or it breaks, please ask Kieran.
+""")
 
 col1, col2 = st.columns(2)
 
@@ -767,7 +944,11 @@ if run_button:
 
     for i, claim_file in enumerate(claim_uploads):
         try:
-            df_claim = parse_claim_sheet(io.BytesIO(claim_file.read()))
+            # Pass filename so parse_claim_sheet can extract the claim month.
+            df_claim = parse_claim_sheet(
+                io.BytesIO(claim_file.read()),
+                filename=claim_file.name,
+            )
             df_claim["Source File"] = claim_file.name
             all_claim_frames.append(df_claim)
         except Exception as e:
@@ -795,7 +976,13 @@ if run_button:
         f"**{len(claim_df)}** total claim rows extracted."
     )
 
+    # ── Duplicate TR warning ──────────────────────────────────
+    duplicates = check_duplicate_trs(claim_df)
 
+    if len(duplicates) > 0:
+        with st.expander("⚠️ Duplicate TRs found in claim sheets", expanded=True):
+            for tr, count in duplicates.items():
+                st.warning(f"TR {tr} appears {count} times")
 
     # ── Build outputs ─────────────────────────────────────────
     st.subheader("Building Report…")
